@@ -1,55 +1,146 @@
 
-// Params
-int worldDimension = 30;
+// Params ///////////////
+int worldDimension = 50;
 int blockSize = 16;
-color snakeColor = color(0, 150, 0);
+float gameStepTime = 150;
+float appleSpeedBoost = 5;
+color snakeColor1 = color(0, 150, 0);
+color snakeColor2 = color(150, 0, 150);
+////////////////////////
 
 PFont font;
 PFont font2;
 int fontSize = 24;
 int fontSize2 = 18;
 
-
-
 class SnakeCell {
-  int x;
-  int y;
+  PVector pos;
   
   SnakeCell next;
   SnakeCell prev;
   
-  SnakeCell(int x, int y) {
-    this.x = x;
-    this.y = y;
+  SnakeCell(PVector pos) {
+    this.pos = pos;
   }
-  
 }
 
+class Snake {
+  SnakeCell head;
+  SnakeCell tail;
+  
+  PVector velocity;
+  int applesEaten;
+  color snakeColor;
+  
+  boolean isDead = false;
+  
+  Snake(PVector velocity, PVector startingPos, color snakeColor) {
+    this.velocity = velocity;
+    this.snakeColor = snakeColor;
+
+    head = new SnakeCell(startingPos);
+    SnakeCell body = new SnakeCell(new PVector(startingPos.x-velocity.x, startingPos.y-velocity.y));
+    tail  = new SnakeCell(new PVector(startingPos.x-(2*velocity.x), startingPos.y-(2*velocity.y)));
+  
+    head.next = body;
+    body.next = tail;
+    body.prev = head;
+    tail.prev = body;
+ 
+    applesEaten = 0;
+  }
+  
+  boolean isInSnake(PVector pos) {
+   SnakeCell myCurrent = this.head;
+     
+   do {
+     if (myCurrent.pos.x == pos.x && myCurrent.pos.y == pos.y)
+       return true;
+      myCurrent = myCurrent.next;
+    } while(myCurrent != null);
+    
+    return false;
+  }
+  
+  boolean intersectsItself() {
+    SnakeCell myCurrent = this.head.next;
+     
+   do {
+     if (myCurrent.pos.x == this.head.pos.x && myCurrent.pos.y == this.head.pos.y)
+       return true;
+      myCurrent = myCurrent.next;
+    } while(myCurrent != null);
+    
+    return false;
+  }
+  
+  boolean isIntersectingOtherSnake(Snake snake) {
+     SnakeCell myCurrent = this.head;
+     
+     do {
+       
+       if (snake.isInSnake(myCurrent.pos))
+           return true;
+          
+      myCurrent = myCurrent.next;
+    } while(myCurrent != null);
+    
+    return false;
+  }
+  
+  void step() {
+    PVector newPos = new PVector(this.head.pos.x + this.velocity.x, this.head.pos.y + this.velocity.y);
+    
+    if (this.head.pos.x == appleX && this.head.pos.y == appleY) {
+      this.makeNewHead(newPos);
+      spawnApple();
+      this.applesEaten++;
+    } else {
+      this.makeNewHead(newPos);
+      this.removeTail();
+    }
+  }
+  
+  void makeNewHead(PVector newPos) {
+    SnakeCell newHead = new SnakeCell(newPos);
+    newHead.next = this.head;
+    this.head.prev = newHead;
+    this.head = newHead;
+  }
+  
+  void removeTail() {
+    SnakeCell newTail = this.tail.prev;
+    newTail.next = null;
+    this.tail = newTail;
+  }
+  
+  void render() {
+    SnakeCell current = head;
+  
+    do {
+      renderBlockOnGrid(floor(current.pos.x), floor(current.pos.y), snakeColor);
+      current = current.next;
+    } while(current != null); 
+  }
+}
+
+Snake snake1;
+Snake snake2;
+
 // Game State
-int velocityX;
-int velocityY;
-
-int startingX;
-int startingY;
-
 int appleX;
 int appleY;
-int applesEaten;
 boolean gameover = false;
 
-SnakeCell head;
-SnakeCell body;
-SnakeCell tail;
 
-
-float gameStepTime = 150;
-float appleSpeedBoost = 5;
 float currentStepTime = 0;
 float lastStepTime = 0;
 
-void setup() {
-  size(510, 510);
-  
+void settings() {
+  size(worldDimension * blockSize + blockSize * 2, worldDimension * blockSize + blockSize * 2);
+}
+
+void setup() {  
   font = createFont("Arial", fontSize ,true);
   font2 = createFont("Arial", fontSize2 ,true);
    
@@ -65,44 +156,53 @@ void draw() {
   background(255);
   
   checkForInput();
-  
   tryGameStep();
   render();
 }
 
 void renderGameover() {
-  fill(color(200, 0 ,0));
-    
-    textFont(font, fontSize);
-    text("Game Over!", (worldDimension*blockSize)/2 - 50,(worldDimension*blockSize)/2);
-    text("Apples Eaten: " + applesEaten, (worldDimension*blockSize)/2 - 70,(worldDimension*blockSize)/2 + 40);
-    
-    textFont(font2, fontSize2);
-    text("(Hit space to play again)", (worldDimension*blockSize)/2 - 85,(worldDimension*blockSize)/2 + 70);
-    
-    if (key == ' ') {
-      reset();
-    }
+  int lineHeight = 40;
+  fill(color(200, 0 ,0));  
+  textFont(font, fontSize);
+  
+  if (snake1.isDead && snake2.isDead)
+      text("Game Over! It's a tie!", (worldDimension*blockSize)/2 - 150,(worldDimension*blockSize)/2);
+  else if (snake1.isDead)
+      text("Game Over! Purple wins!", (worldDimension*blockSize)/2 - 150,(worldDimension*blockSize)/2);
+  else if (snake2.isDead)
+      text("Game Over! Green wins!", (worldDimension*blockSize)/2 - 150,(worldDimension*blockSize)/2);
+  
+  text("Apples Eaten by Green: " + snake1.applesEaten, (worldDimension*blockSize)/2 - 100,(worldDimension*blockSize)/2 + lineHeight);
+  text("Apples Eaten by Purple: " + snake2.applesEaten, (worldDimension*blockSize)/2 - 100,(worldDimension*blockSize)/2 + lineHeight*2);
+  
+  textFont(font2, fontSize2);
+  text("(Hit space to play again)", (worldDimension*blockSize)/2 - 85,(worldDimension*blockSize)/2 + lineHeight*3);
+  
+  if (key == ' ') {
+    reset();
+  }
 }
+
+PVector randomWorldPos() {
+  return new PVector(floor(random(4, worldDimension-4)), floor(random(4, worldDimension-4)));
+}
+
+PVector randomVelocity() {
+  int choice = floor(random(0, 4));
+  if (choice == 0) return new PVector(-1, 0);
+  if (choice == 1) return new PVector(1, 0);
+  if (choice == 2) return new PVector(0, 1);
+  return new PVector(0, -1);
+}
+
 
 void reset() {
   gameover = false;
-  velocityX = 1;
-  velocityY = 0;
-
-  startingX = floor(random(4, worldDimension-4));
-  startingY = floor(random(4, worldDimension-4));
-
-  head = new SnakeCell(startingX, startingY);
-  body = new SnakeCell(startingX-1, startingY);
-  tail  = new SnakeCell(startingX-2, startingY);
   
-  head.next = body;
-  body.next = tail;
-  body.prev = head;
-  tail.prev = body;
- 
-  applesEaten = 0;
+  snake1 = new Snake(randomVelocity(), randomWorldPos(), snakeColor1);
+  do {
+    snake2 = new Snake(randomVelocity(), randomWorldPos(), snakeColor2);
+  } while(snake1.isIntersectingOtherSnake(snake2));
   
   spawnApple();
 }
@@ -110,29 +210,41 @@ void reset() {
 void checkForInput() {
   if (!keyPressed) return;
   
-  if ((key == 'a' || keyCode == LEFT) && !(head.next.x == head.x-1 && head.next.y == head.y)) {
-    velocityX = -1;
-    velocityY = 0;
+  if (key == 'a' && !(snake1.head.next.pos.x == snake1.head.pos.x-1 && snake1.head.next.pos.y == snake1.head.pos.y)) {
+    snake1.velocity = new PVector(-1, 0);
   }
   
-  if ((key == 'w'  || keyCode == UP) && !(head.next.x == head.x && head.next.y == head.y-1)) {
-    velocityX = 0;
-    velocityY = -1;
+  if (key == 'w' && !(snake1.head.next.pos.x == snake1.head.pos.x && snake1.head.next.pos.y == snake1.head.pos.y-1)) {
+    snake1.velocity = new PVector(0, -1);
   }
   
-  if ((key == 's' || keyCode == DOWN) && !(head.next.x == head.x && head.next.y == head.y+1)) {
-    velocityX = 0;
-    velocityY = 1;
+  if (key == 's' && !(snake1.head.next.pos.x == snake1.head.pos.x && snake1.head.next.pos.y == snake1.head.pos.y+1)) {
+    snake1.velocity = new PVector(0, 1);
   }
   
-  if ((key == 'd' || keyCode == RIGHT)  && !(head.next.x == head.x+1 && head.next.y == head.y)) {
-    velocityX = 1;
-    velocityY = 0;
+  if (key == 'd' && !(snake1.head.next.pos.x == snake1.head.pos.x+1 && snake1.head.next.pos.y == snake1.head.pos.y)) {
+    snake1.velocity = new PVector(1, 0);
+  }
+  
+  if (keyCode == LEFT && !(snake2.head.next.pos.x == snake2.head.pos.x-1 && snake2.head.next.pos.y == snake2.head.pos.y)) {
+    snake2.velocity = new PVector(-1, 0);
+  }
+  
+  if (keyCode == UP && !(snake2.head.next.pos.x == snake2.head.pos.x && snake2.head.next.pos.y == snake2.head.pos.y-1)) {
+    snake2.velocity = new PVector(0, -1);
+  }
+  
+  if (keyCode == DOWN && !(snake2.head.next.pos.x == snake2.head.pos.x && snake2.head.next.pos.y == snake2.head.pos.y+1)) {
+    snake2.velocity = new PVector(0, 1);
+  }
+  
+  if (keyCode == RIGHT && !(snake2.head.next.pos.x == snake2.head.pos.x+1 && snake2.head.next.pos.y == snake2.head.pos.y)) {
+    snake2.velocity = new PVector(1, 0);
   }
 }
 
 void tryGameStep() {
-  float actualGameStepTime = gameStepTime - (applesEaten*appleSpeedBoost);
+  float actualGameStepTime = gameStepTime - ((snake1.applesEaten + snake2.applesEaten)*appleSpeedBoost);
   
   float currentTime = millis();
   currentStepTime = currentTime - lastStepTime;
@@ -143,82 +255,50 @@ void tryGameStep() {
 }
 
 void gameStep() {
-  int newX = head.x + velocityX;
-  int newY = head.y + velocityY;
+  snake1.step();
+  snake2.step();
   
-  if (isGameover(newX, newY)) {
-    gameover = true;  
-    return; 
+  if (snake1.isInSnake(snake2.head.pos) || isWalls(snake2.head.pos) || snake2.intersectsItself()) {
+    snake2.isDead = true;
   }
   
-  if (head.x == appleX && head.y == appleY) {
-    makeNewHead(newX, newY);
-    spawnApple();
-    applesEaten++;
-  } else {
-    makeNewHead(newX, newY);
-    removeTail();
+  if (snake2.isInSnake(snake1.head.pos) || isWalls(snake1.head.pos) || snake1.intersectsItself()) {
+    snake1.isDead = true;
+  }
+  
+  if (snake1.isDead || snake2.isDead) {
+    gameover = true;
   }
 }
 
-boolean isGameover(int newX, int newY) {
-  return isWalls(newX, newY) || isInSnake(newX, newY);
+boolean isGameover(PVector pos) {
+  return isWalls(pos) || snake1.isInSnake(pos) || snake2.isInSnake(pos);
 }
 
-boolean isWalls(int newX, int newY) {
-  if (newX < 0) return true;
-  if (newX >= worldDimension) return true;
-  if (newY < 0) return true;
-  if (newY >= worldDimension) return true;
+boolean isWalls(PVector pos) {
+  if (pos.x < 0) return true;
+  if (pos.x >= worldDimension) return true;
+  if (pos.y < 0) return true;
+  if (pos.y >= worldDimension) return true;
    
   return false;
 }
 
-void makeNewHead(int newX, int newY) {
-  SnakeCell newHead =new SnakeCell(newX, newY);
-  newHead.next = head;
-  head.prev = newHead;
-  head = newHead;
-}
-
-void removeTail() {
-  SnakeCell newTail = tail.prev;
-  newTail.next = null;
-  tail = newTail;
-}
 
 void render() {
   renderWalls();
   renderApple(); 
-  renderSnake();
+  snake1.render();
+  snake2.render();
 }
 
 void spawnApple() {
-  //PVector[] possibleSpots = new PVector[worldDimension*worldDimension];
-  //int current = 0;
-  //for (int i=0; i<worldDimension; ++i) {
-  //  for (int j=0; j<worldDimension; ++j) {
-  //    possibleSpots[current++] = new PVector(i, j);
-  //  }
-  //}
-  
   do {
     appleX = floor(random(worldDimension));
     appleY = floor(random(worldDimension));
-  } while (isInSnake(appleX, appleY));
+  } while (snake1.isInSnake(new PVector(appleX, appleY)) || snake2.isInSnake(new PVector(appleX, appleY)));
 }
 
-boolean isInSnake(int x, int y) {
-  SnakeCell current = head;
-   do {
-     if (current.x == x && current.y == y)
-       return true;
-    
-    current = current.next;
-  } while(current != null);
-  
-  return false;
-}
 
 void renderWalls() {
   color wallColor = color(0,0,0);
@@ -230,15 +310,6 @@ void renderWalls() {
     renderBlock(worldDimension+1, i, wallColor);
   }
   renderBlock(worldDimension+1, worldDimension+1, wallColor);
-}
-
-void renderSnake() {
-  SnakeCell current = head;
-  
-  do {
-    renderBlockOnGrid(current.x, current.y, snakeColor);
-    current = current.next;
-  } while(current != null); 
 }
 
 void renderApple() {
